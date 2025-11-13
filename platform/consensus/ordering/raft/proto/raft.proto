@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package resdb.raft;
+
+import "platform/proto/replica_info.proto";
+
+message AppendEntries {
+  int32 term = 1;
+  int32 leader_id = 2;
+  int32 prev_log_index = 3;
+  int32 prev_log_term = 4;
+  repeated bytes entries = 5;
+  int32 leader_commit = 6;
+}
+
+message AppendEntriesResp {
+  int32 term = 1;
+  bool success = 2;
+  // The highest log index that the follower has matched (for successful replies).
+  int32 match_index = 3;
+}
