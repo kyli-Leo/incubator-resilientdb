@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "executor/common/custom_query.h"
+#include "executor/common/transaction_manager.h"
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/ordering/pbft/query.h"
 #include "platform/networkstrate/consensus_manager.h"
@@ -41,9 +42,28 @@ class ConsensusManagerRaft : public ConsensusManager {
                               std::unique_ptr<Request> request);
 
   // Internal implementation
+  // Handle TYPE_CLIENT_REQUEST: 
+  // As we dont have batching at this moment, 
+  // would just parse and process as a TYPE_NEW_TXNS with single request. 
   int HandleClientRequest(std::unique_ptr<Context> context,
                           std::unique_ptr<Request> request);
 
+  // Handle transaction requests (TYPE_NEW_TXNS) - goes through Raft consensus
+  // It would parse the reqeusts and then start new transactions.
+  // Check if I'm the leader, if not, redirect to leader.
+  
+  // (currently no batching so only one request is processed)
+  int HandleNewTransactions(std::unique_ptr<Context> context,
+                            std::unique_ptr<Request> request);
+
+  // Handle Raft-specific messages (TYPE_CUSTOM_CONSENSUS with user_type)
+  // Routes to appropriate handler based on user_type
+  int HandleRaftMessage(std::unique_ptr<Context> context,
+                        std::unique_ptr<Request> request);
+
+  // Handle AppendEntries requests
+  // It would parse the requests and then append to the log.
+  // (currently no batching so only one request is processed)
   int HandleAppendEntries(std::unique_ptr<Context> context,
                           std::unique_ptr<Request> request);
 
@@ -59,6 +79,15 @@ class ConsensusManagerRaft : public ConsensusManager {
 
   // increment commited idx, then apply to log to state machine
   void ApplyCommittedEntries();
+  
+  // Advance commit_index_ if majority of followers have confirmed
+  void AdvanceCommitIndex();
+  
+  // Send AppendEntries RPC to all followers
+  void SendAppendEntriesToAll();
+  
+  // Helper: Send AppendEntriesResponse to leader
+  void SendAppendEntriesResponse(int32_t leader_id, bool success, int32_t match_index);
 
  private:
   // raft role
@@ -79,6 +108,7 @@ class ConsensusManagerRaft : public ConsensusManager {
   std::mutex mutex_;
   Role role_ = Role::kFollower;
   int32_t self_id_ = 0;
+  int32_t leader_id_ = -1;  // Track current leader (updated from AppendEntries)
   std::vector<ReplicaInfo> replicas_;
 
   // persistent state

@@ -4,6 +4,14 @@ package resdb.raft;
 
 import "platform/proto/replica_info.proto";
 
+// Raft message types (used as user_type in Request)
+enum RaftMessageType {
+  RAFT_APPEND_ENTRIES = 0;
+  RAFT_APPEND_ENTRIES_RESPONSE = 1;
+  RAFT_REQUEST_VOTE = 2;
+  RAFT_REQUEST_VOTE_RESPONSE = 3;
+}
+
 message AppendEntries {
   int32 term = 1;
   int32 leader_id = 2;
