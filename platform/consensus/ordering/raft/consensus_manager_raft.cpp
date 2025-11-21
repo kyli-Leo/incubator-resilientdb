@@ -490,29 +490,14 @@ void ConsensusManagerRaft::SendAppendEntriesResponse(int32_t leader_id, bool suc
   GetBroadCastClient()->SendMessage(*response_request, leader_id);
 }
 
-// int ConsensusManagerRaft::HandleRequestVote(std::unique_ptr<Context> context,
-//                                             std::unique_ptr<Request> request) {
-//   // TODO:
-//   // 1. 解析 RequestVote RPC
-//   // 2. 如果对方 term 比自己新，更新 current_term_ 并退为 follower
-//   // 3. 按 Raft 规则决定是否投票（看 term、日志新旧）
-//   // 4. 返回 RequestVoteResponse
-//   return 0;
-// }
-
-// int ConsensusManagerRaft::HandleRequestVoteResponse(
-//     std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
-//   // TODO:
-//   // 1. 解析响应
-//   // 2. 统计选票
-//   // 3. 如果超过半数，成为 leader，并初始化 next_index_/match_index_
-//   return 0;
-// }
-
 int ConsensusManagerRaft::HandleRequestVote(std::unique_ptr<Context> context,
                                             std::unique_ptr<Request> request) {
   (void)context;
   std::unique_lock<std::mutex> lk(mutex_);
+  //   // 1. 解析 RequestVote RPC
+  //   // 2. 如果对方 term 比自己新，更新 current_term_ 并退为 follower
+  //   // 3. 按 Raft 规则决定是否投票（看 term、日志新旧）
+  //   // 4. 返回 RequestVoteResponse
 
   raft::RequestVote rv;
   if (!rv.ParseFromString(request->data())) {
@@ -582,7 +567,10 @@ int ConsensusManagerRaft::HandleRequestVote(std::unique_ptr<Context> context,
 int ConsensusManagerRaft::HandleRequestVoteResponse(
     std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
   (void)context;
-
+  // 1. 解析响应
+  // 2. 统计选票
+  // 3. 如果超过半数，成为 leader，并初始化 next_index_/match_index_
+  
   raft::RequestVoteResp resp;
   if (!resp.ParseFromString(request->data())) {
     LOG(ERROR) << "[Raft] Failed to parse RequestVoteResp";
