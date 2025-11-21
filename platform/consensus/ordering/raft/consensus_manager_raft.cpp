@@ -183,11 +183,10 @@ int ConsensusManagerRaft::HandleRaftMessage(
       return HandleAppendEntries(std::move(context), std::move(request));
     case 1:  // RAFT_APPEND_ENTRIES_RESPONSE
       return HandleAppendEntriesResponse(std::move(context), std::move(request));
-    // TODO: Implement election messages
-    // case 2:  // RAFT_REQUEST_VOTE
-    //   return HandleRequestVote(std::move(context), std::move(request));
-    // case 3:  // RAFT_REQUEST_VOTE_RESPONSE
-    //   return HandleRequestVoteResponse(std::move(context), std::move(request));
+    case 2:  // RAFT_REQUEST_VOTE
+      return HandleRequestVote(std::move(context), std::move(request));
+    case 3:  // RAFT_REQUEST_VOTE_RESPONSE
+      return HandleRequestVoteResponse(std::move(context), std::move(request));
     default:
       LOG(WARNING) << "[Raft] Unknown Raft message type: " << user_type;
       return -1;
@@ -509,6 +508,97 @@ void ConsensusManagerRaft::SendAppendEntriesResponse(int32_t leader_id, bool suc
 //   // 3. 如果超过半数，成为 leader，并初始化 next_index_/match_index_
 //   return 0;
 // }
+
+int ConsensusManagerRaft::HandleRequestVote(std::unique_ptr<Context> context,
+                                            std::unique_ptr<Request> request) {
+  (void)context;
+  std::unique_lock<std::mutex> lk(mutex_);
+
+  raft::RequestVote rv;
+  if (!rv.ParseFromString(request->data())) {
+    LOG(ERROR) << "[Raft] Failed to parse RequestVote";
+    return -1;
+  }
+
+  // If candidate has a higher term, update term & be follower
+  if (rv.term() > current_term_) {
+    current_term_ = rv.term();
+    role_ = Role::kFollower;
+    leader_id_ = -1;
+    voted_for_ = -1;
+    // TODO: Cancel election timer!!!
+  }
+
+  bool vote_granted = false;
+  if (rv.term() < current_term_) {
+    // Candidate的term比自己旧，不投
+    vote_granted = false;
+  } else {
+    // Not yet voted this term, or already voted for this candidate.
+    bool not_voted_or_same = (voted_for_ == -1 || voted_for_ == rv.candidate_id());
+
+    // Determine this node's last log index/term.
+    int32_t last_log_index = static_cast<int32_t>(log_.size()) - 1;
+    int32_t last_log_term = 0;
+    if (last_log_index >= 0 && last_log_index < static_cast<int32_t>(log_.size())) {
+      last_log_term = static_cast<int32_t>(log_[last_log_index].term);
+    }
+
+    // logOK
+    bool up_to_date =
+        (rv.last_log_term() > last_log_term) ||
+        (rv.last_log_term() == last_log_term && rv.last_log_index() >= last_log_index);
+
+    if (not_voted_or_same && up_to_date) { // term相等，logOK，没投过=》则投
+      vote_granted = true;
+      voted_for_ = rv.candidate_id();
+      // Election-timeout reset would occur here if implemented.
+    }
+  }
+
+  // Send response back to candidate.
+  raft::RequestVoteResp resp;
+  resp.set_term(static_cast<int32_t>(current_term_));
+  resp.set_vote_granted(vote_granted);
+
+  std::string resp_data;
+  if (!resp.SerializeToString(&resp_data)) {
+    LOG(ERROR) << "[Raft] Failed to serialize RequestVoteResp";
+    return -1;
+  }
+
+  std::unique_ptr<Request> response_request = std::make_unique<Request>();
+  response_request->set_type(Request::TYPE_CUSTOM_CONSENSUS);
+  response_request->set_user_type(3);  // RAFT_REQUEST_VOTE_RESPONSE
+  response_request->set_sender_id(self_id_);
+  response_request->set_data(resp_data);
+
+  int32_t target = request->sender_id() > 0 ? request->sender_id() : rv.candidate_id();
+  lk.unlock();
+  GetBroadCastClient()->SendMessage(*response_request, target);
+  return 0;
+}
+
+int ConsensusManagerRaft::HandleRequestVoteResponse(
+    std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
+  (void)context;
+
+  raft::RequestVoteResp resp;
+  if (!resp.ParseFromString(request->data())) {
+    LOG(ERROR) << "[Raft] Failed to parse RequestVoteResp";
+    return -1;
+  }
+
+  // Step down if we see a higher term in the response.
+  if (resp.term() > current_term_) {
+    current_term_ = resp.term();
+    role_ = Role::kFollower;
+    leader_id_ = -1;
+    voted_for_ = -1;
+  }
+  // Vote counting and state transition to leader will be handled when election logic is added.
+  return 0;
+}
 
 // ================= Advance Commit Index =================
 

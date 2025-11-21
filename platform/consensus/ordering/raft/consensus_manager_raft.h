@@ -70,12 +70,12 @@ class ConsensusManagerRaft : public ConsensusManager {
   int HandleAppendEntriesResponse(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request);
 
-  // TODO: Implement later assue that raft election is not needed now
-  // int HandleRequestVote(std::unique_ptr<Context> context,
-  //                       std::unique_ptr<Request> request);
+  // Election RPC handlers
+  int HandleRequestVote(std::unique_ptr<Context> context,
+                        std::unique_ptr<Request> request);
 
-  // int HandleRequestVoteResponse(std::unique_ptr<Context> context,
-  //                               std::unique_ptr<Request> request);
+  int HandleRequestVoteResponse(std::unique_ptr<Context> context,
+                                std::unique_ptr<Request> request);
 
   // increment commited idx, then apply to log to state machine
   void ApplyCommittedEntries();
