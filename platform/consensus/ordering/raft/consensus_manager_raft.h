@@ -46,31 +46,7 @@ class ConsensusManagerRaft : public ConsensusManager {
   // As we dont have batching at this moment, 
   // would just parse and process as a TYPE_NEW_TXNS with single request. 
   int HandleClientRequest(std::unique_ptr<Context> context,
-                          std::unique_ptr<Request> request)   
-    // Must take lock to read leader_id_ safely
-    std::lock_guard<std::mutex> lk(mutex_);
-
-    // 1. If I am NOT leader → reject or redirect client
-    if (role_ != Role::kLeader) {
-      Request response;
-      response.set_type(Request::TYPE_CLIENT_RESPONSE);
-      response.set_result(false); // optional
-      response.mutable_redirect()->set_leader_id(leader_id_);
-
-      // Send back to client
-      SendResponse(std::move(context), response);
-      return 0;
-    }
-
-    // 2. I am the leader → convert client request to internal NEW_TXNS
-    auto txn_req = std::make_unique<Request>();
-    txn_req->set_type(Request::TYPE_NEW_TXNS);
-    txn_req->set_data(request->data());  
-    txn_req->set_sender_id(self_id_);
-
-    // Reuse existing handler to initiate RAFT replication
-    return HandleNewTransactions(std::move(context), std::move(txn_req));
-  };
+                          std::unique_ptr<Request> request);
 
   // Handle transaction requests (TYPE_NEW_TXNS) - goes through Raft consensus
   // It would parse the reqeusts and then start new transactions.
